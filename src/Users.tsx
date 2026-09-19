@@ -3,7 +3,7 @@ import { api, fmtDate } from './api';
 
 type Admins = { env_admins: string[]; admins: { email: string; created_at: number; signed_in: boolean }[] };
 type U = { id: string; email: string | null; name: string | null; display_name: string | null; username: string | null; plan: string; plan_expires_at?: number | null; paper_credits?: number; role: string; created_at: number; tests_taken: number; tests_hosted: number; purchases: number };
-const SKUS = ['pack_1', 'pack_5', 'teacher_m', 'teacher_y', 'coaching_m', 'coaching_y'];
+const SKUS = ['pack_1', 'pack_5', 'student_10', 'teacher_m', 'teacher_y', 'coaching_m', 'coaching_y'];
 export function Users() {
   const [q, setQ] = useState('');
   const [users, setUsers] = useState<U[] | null>(null);
