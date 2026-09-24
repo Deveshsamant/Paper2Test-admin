@@ -20,6 +20,15 @@ export async function api<T = any>(path: string, init: { method?: string; body?:
   if (!res.ok) { if (res.status === 401) session.token = null; throw new ApiError(res.status, data.error ?? res.statusText, data); }
   return data as T;
 }
+/** Raw upload (cover image, study-material piece). */
+export async function apiRaw<T = any>(path: string, method: string, body: Blob | ArrayBuffer, contentType: string): Promise<T> {
+  const headers: Record<string, string> = { 'content-type': contentType };
+  if (session.token) headers.authorization = `Bearer ${session.token}`;
+  const res = await fetch(API + path, { method, headers, body });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, data.error ?? res.statusText, data);
+  return data as T;
+}
 export const rupees = (paise: number) => `₹${(paise / 100).toFixed(paise % 100 ? 2 : 0)}`;
 export const fmtDate = (ms: number | null | undefined) => (ms ? new Date(ms).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—');
 export const toPaise = (r: string) => Math.round(Number(r || 0) * 100);

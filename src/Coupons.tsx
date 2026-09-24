@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'preact/hooks';
 import { api, fmtDate, fromPaise, rupees, toPaise } from './api';
-type C = { code: string; percent_off: number; flat_off_paise: number; bundle_id: string | null; bundle_title: string | null; max_uses: number | null; used_count: number; expires_at: number | null; active: number };
+type C = { code: string; percent_off: number; flat_off_paise: number; bundle_id: string | null; bundle_title: string | null; max_uses: number | null; used_count: number; expires_at: number | null; active: number; once_per_user?: number };
 type B = { id: string; title: string };
 export function Coupons() {
   const [rows, setRows] = useState<C[] | null>(null);
   const [bundles, setBundles] = useState<B[]>([]);
-  const [f, setF] = useState({ code: '', percent_off: '10', flat_off: '', bundle_id: '', max_uses: '', expires: '' });
+  const [f, setF] = useState({ code: '', percent_off: '10', flat_off: '', bundle_id: '', max_uses: '', expires: '', once: false });
   const [msg, setMsg] = useState<string | null>(null);
   const load = () => api<{ coupons: C[] }>('/admin/coupons').then((r) => setRows(r.coupons));
   useEffect(() => { load(); api<{ bundles: B[] }>('/admin/bundles').then((r) => setBundles(r.bundles)); }, []);
@@ -13,7 +13,7 @@ export function Coupons() {
   async function create(e: Event) {
     e.preventDefault(); setMsg(null);
     try {
-      await api('/admin/coupons', { method: 'POST', body: { code: f.code.trim(), percent_off: Number(f.percent_off || 0), flat_off_paise: toPaise(f.flat_off), bundle_id: f.bundle_id || null, max_uses: f.max_uses ? Number(f.max_uses) : null, expires_at: f.expires ? new Date(f.expires).getTime() : null, active: true } });
+      await api('/admin/coupons', { method: 'POST', body: { code: f.code.trim(), percent_off: Number(f.percent_off || 0), flat_off_paise: toPaise(f.flat_off), bundle_id: f.bundle_id || null, max_uses: f.max_uses ? Number(f.max_uses) : null, expires_at: f.expires ? new Date(f.expires).getTime() : null, active: true, once_per_user: f.once } });
       setF({ ...f, code: '' }); load(); setMsg('Coupon created.');
     } catch (err: any) { setMsg(err.code === 'code_taken' ? 'That code already exists.' : err.data?.issues?.[0]?.message ?? err.message); }
   }
@@ -30,12 +30,13 @@ export function Coupons() {
           <select value={f.bundle_id} onChange={set('bundle_id')}><option value="">Any bundle</option>{bundles.map((b) => <option value={b.id}>{b.title}</option>)}</select>
           <label class="chk">max uses <input type="number" min={1} value={f.max_uses} onInput={set('max_uses')} placeholder="∞" style="width:80px" /></label>
           <label class="chk">expires <input type="date" value={f.expires} onInput={set('expires')} /></label>
+          <label class="chk"><input type="checkbox" checked={f.once} onChange={(e) => setF({ ...f, once: (e.target as HTMLInputElement).checked })} /> once per person</label>
           <button class="btn primary">Create</button>{msg && <span class="muted">{msg}</span>}
         </form>
       </section>
       <section class="card">{!rows ? <p class="muted">Loading…</p> : rows.length === 0 ? <p class="muted">No coupons yet.</p> : (
         <table class="tbl"><thead><tr><th>Code</th><th>Discount</th><th>Bundle</th><th>Used</th><th>Expires</th><th>Status</th><th></th></tr></thead>
-          <tbody>{rows.map((c) => <tr key={c.code}><td><code>{c.code}</code></td><td>{c.percent_off ? `${c.percent_off}%` : ''}{c.percent_off && c.flat_off_paise ? ' + ' : ''}{c.flat_off_paise ? rupees(c.flat_off_paise) : ''}{!c.percent_off && !c.flat_off_paise ? '—' : ''}</td><td>{c.bundle_title ?? 'any'}</td><td>{c.used_count}{c.max_uses ? ` / ${c.max_uses}` : ''}</td><td class="muted">{c.expires_at ? fmtDate(c.expires_at) : 'never'}</td><td><span class={`pill ${c.active ? 'live' : 'ended'}`}>{c.active ? 'active' : 'off'}</span></td><td class="right"><button class="btn sm" onClick={() => toggle(c)}>{c.active ? 'Disable' : 'Enable'}</button> <button class="btn sm" onClick={() => remove(c)}>Delete</button></td></tr>)}</tbody></table>
+          <tbody>{rows.map((c) => <tr key={c.code}><td><code>{c.code}</code></td><td>{c.percent_off ? `${c.percent_off}%` : ''}{c.percent_off && c.flat_off_paise ? ' + ' : ''}{c.flat_off_paise ? rupees(c.flat_off_paise) : ''}{!c.percent_off && !c.flat_off_paise ? '—' : ''}</td><td>{c.bundle_title ?? 'any'}</td><td>{c.used_count}{c.max_uses ? ` / ${c.max_uses}` : ''}{c.once_per_user ? <div class="muted small">once per person</div> : null}</td><td class="muted">{c.expires_at ? fmtDate(c.expires_at) : 'never'}</td><td><span class={`pill ${c.active ? 'live' : 'ended'}`}>{c.active ? 'active' : 'off'}</span></td><td class="right"><button class="btn sm" onClick={() => toggle(c)}>{c.active ? 'Disable' : 'Enable'}</button> <button class="btn sm" onClick={() => remove(c)}>Delete</button></td></tr>)}</tbody></table>
       )}</section>
     </>
   );
