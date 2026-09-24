@@ -1,9 +1,14 @@
 // Admin API client. The API lives on the main site; the session token is the same Google-backed session.
-const DEFAULT_API = 'https://paper2test.app/api';
+// Served by the main site (paper2test.app/admin/ or a local dev server): same origin. Elsewhere (Vercel): the live API.
+const SAME_ORIGIN = /(^|\.)paper2test\.app$|^localhost$|^127\.0\.0\.1$/.test(location.hostname) && location.pathname.startsWith('/admin');
+const DEFAULT_API = SAME_ORIGIN ? `${location.origin}/api` : 'https://paper2test.app/api';
 export const API = (() => { try { return localStorage.getItem('p2t.admin.api') || DEFAULT_API; } catch { return DEFAULT_API; } })();
 const TOKEN_KEY = 'p2t.admin.token';
+// Session hand-over from the Android app (?tok=...): keep it, then clean the address bar.
+try { const tok = new URLSearchParams(location.search).get('tok'); if (tok) { localStorage.setItem(TOKEN_KEY, tok); history.replaceState(null, '', location.pathname + location.hash); } } catch { /* storage blocked */ }
 export const session = {
-  get token(): string | null { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } },
+  // On paper2test.app the admin panel shares the website's sign-in.
+  get token(): string | null { try { return localStorage.getItem(TOKEN_KEY) ?? (SAME_ORIGIN ? localStorage.getItem('p2t.host.token') : null); } catch { return null; } },
   set token(v: string | null) { try { v ? localStorage.setItem(TOKEN_KEY, v) : localStorage.removeItem(TOKEN_KEY); } catch {} },
 };
 export class ApiError extends Error { constructor(public status: number, public code: string, public data: any) { super(code); } }
