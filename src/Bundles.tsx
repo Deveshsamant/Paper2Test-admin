@@ -3,9 +3,11 @@ import { api, fromPaise, rupees, toPaise } from './api';
 import { go } from './main';
 
 export type Item = { id: string; paper_id: string; test_id: string; position: number; title: string | null; paper_title: string; code: string; duration_sec: number; marking_json: string; question_count: number; keyed_count: number };
-export type Bundle = { id: string; slug: string; title: string; description: string | null; exam: string | null; price_paise: number; original_price_paise: number | null; max_attempts_per_test: number | null; validity_days: number | null; status: string; sort_order: number; items: Item[]; sales: number; revenue_paise: number; item_count?: number };
+export type Bundle = { id: string; slug: string; title: string; description: string | null; exam: string | null; exam_tags?: string | null; price_paise: number; original_price_paise: number | null; max_attempts_per_test: number | null; validity_days: number | null; status: string; sort_order: number; items: Item[]; sales: number; revenue_paise: number; item_count?: number };
 export type Paper = { id: string; title: string; question_count: number; keyed_count: number };
 export const statusPill = (s: string) => `pill ${s === 'published' ? 'live' : s === 'archived' ? 'ended' : 'pending'}`;
+
+type ExamCategory = { id: string; name: string; exams: { code: string; name: string }[] };
 
 export function Bundles() {
   const [rows, setRows] = useState<Bundle[] | null>(null);
@@ -30,7 +32,11 @@ export function BundleEdit({ id }: { id: string }) {
   const [f, setF] = useState<any>(null);
   const [add, setAdd] = useState({ paper_id: '', duration_min: '60', correct: '2', wrong: '0.66', show_result: true });
   const [msg, setMsg] = useState<string | null>(null);
+  const [cats, setCats] = useState<ExamCategory[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
+  useEffect(() => { api<{ categories: ExamCategory[] }>('/exams').then((r) => setCats(r.categories)).catch(() => {}); }, []);
   const load = () => api<{ bundle: Bundle }>(`/admin/bundles/${id}`).then((r) => {
+    try { setTags(JSON.parse(r.bundle.exam_tags ?? '[]')); } catch { setTags([]); }
     setB(r.bundle);
     setF({ title: r.bundle.title, slug: r.bundle.slug, description: r.bundle.description ?? '', exam: r.bundle.exam ?? '', price: fromPaise(r.bundle.price_paise), original: fromPaise(r.bundle.original_price_paise), max_attempts: r.bundle.max_attempts_per_test ?? '', validity: r.bundle.validity_days ?? '', sort_order: r.bundle.sort_order });
   });
@@ -40,7 +46,7 @@ export function BundleEdit({ id }: { id: string }) {
   async function save(status?: string) {
     setMsg(null);
     try {
-      await api(`/admin/bundles/${id}`, { method: 'PUT', body: { title: f.title, slug: f.slug || undefined, description: f.description || null, exam: f.exam || null, price_paise: toPaise(f.price), original_price_paise: f.original ? toPaise(f.original) : null, max_attempts_per_test: f.max_attempts ? Number(f.max_attempts) : null, validity_days: f.validity ? Number(f.validity) : null, sort_order: Number(f.sort_order || 0), ...(status ? { status } : {}) } });
+      await api(`/admin/bundles/${id}`, { method: 'PUT', body: { title: f.title, slug: f.slug || undefined, description: f.description || null, exam: f.exam || null, exam_tags: tags, price_paise: toPaise(f.price), original_price_paise: f.original ? toPaise(f.original) : null, max_attempts_per_test: f.max_attempts ? Number(f.max_attempts) : null, validity_days: f.validity ? Number(f.validity) : null, sort_order: Number(f.sort_order || 0), ...(status ? { status } : {}) } });
       await load(); setMsg(status ? `Bundle ${status}.` : 'Saved.');
     } catch (e: any) { setMsg(e.code === 'slug_taken' ? 'That slug is taken.' : e.data?.issues?.[0]?.message ?? e.message); }
   }
@@ -64,6 +70,11 @@ export function BundleEdit({ id }: { id: string }) {
           <label class="field">Title<input value={f.title} onInput={set('title')} /></label>
           <label class="field">Slug (URL)<input value={f.slug} onInput={set('slug')} /></label>
           <label class="field">Exam<input value={f.exam} onInput={set('exam')} placeholder="e.g. UPSC CSE Prelims" /></label>
+          <div class="field"><span>Exam tags — students who chose these exams see this bundle first{!tags.length && ' (none: guessed from the exam and title)'}</span>
+            <div class="chips">{cats.flatMap((c) => c.exams).map((e) => (
+              <button type="button" key={e.code} class={`chip ${tags.includes(e.code) ? 'on' : ''}`} onClick={() => setTags(tags.includes(e.code) ? tags.filter((t) => t !== e.code) : [...tags, e.code])}>{e.name}</button>
+            ))}</div>
+          </div>
           <label class="field">Description<textarea rows={4} value={f.description} onInput={set('description')} /></label>
           <div class="grid3">
             <label class="field">Price (₹)<input type="number" min={0} step="1" value={f.price} onInput={set('price')} /></label>

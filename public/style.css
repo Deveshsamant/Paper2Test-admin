@@ -66,3 +66,6 @@ footer.foot { text-align:center; padding:24px 16px 32px }
 .admintag { background:#fff1f1; color:var(--bad); font-size:11px; padding:2px 6px; border-radius:99px; margin-left:6px }
 .form .field { margin:6px 0 } .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:14px }
 .tbl input, .tbl select { padding:4px 6px } .stat { font-size:13px; color:var(--muted) }
+
+/* Exam tag chips on a bundle */
+.chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px } .chip { border:1px solid var(--line); background:#fff; color:var(--text); border-radius:999px; padding:5px 10px; font-size:13px; cursor:pointer } .chip.on { background:#eef4ff; border-color:var(--brand); color:var(--brand); font-weight:600 }
