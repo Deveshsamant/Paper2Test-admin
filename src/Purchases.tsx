@@ -2,6 +2,23 @@ import { useEffect, useState } from 'preact/hooks';
 import { api, fmtDate, rupees } from './api';
 type P = { id: string; bundle_title: string; email: string | null; username: string | null; display_name: string | null; name: string | null; list_price_paise: number; paid_paise: number; coupon_code: string | null; status: string; provider: string; created_at: number; paid_at: number | null; expires_at: number | null };
 type B = { id: string; title: string };
+type PP = { id: string; code: string; paid_paise: number; status: string; provider: string; created_at: number; paid_at: number | null; email: string | null; username: string | null; display_name: string | null; name: string | null };
+const WHERE: Record<string, string> = { razorpay: 'Website', google_play: 'Google Play', admin_grant: 'Given by admin' };
+
+/** Plan and paper-pack sales (website and app). */
+function PlanSales() {
+  const [rows, setRows] = useState<PP[] | null>(null);
+  useEffect(() => { api<{ purchases: PP[] }>('/admin/plan-purchases').then((r) => setRows(r.purchases)); }, []);
+  return (
+    <section class="card"><h2>Plans and paper packs</h2>
+      {!rows ? <p class="muted">Loading…</p> : !rows.length ? <p class="muted">No plan or pack purchases yet.</p> : (
+        <table class="tbl"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Paid</th><th>Where</th><th>Status</th></tr></thead>
+          <tbody>{rows.map((p) => <tr key={p.id}><td class="muted">{fmtDate(p.paid_at ?? p.created_at)}</td><td>{p.display_name ?? p.name}<div class="muted small">{p.email}{p.username ? ` · @${p.username}` : ''}</div></td><td>{p.code}</td><td>{rupees(p.paid_paise)}</td><td>{WHERE[p.provider] ?? p.provider}</td><td><span class={`pill ${p.status === 'paid' ? 'live' : p.status === 'pending' ? 'pending' : 'ended'}`}>{p.status}</span></td></tr>)}</tbody></table>
+      )}
+      <p class="muted small">Google Play amounts are the price before Google's 15%.</p>
+    </section>
+  );
+}
 export function Purchases() {
   const [rows, setRows] = useState<P[] | null>(null);
   const [bundles, setBundles] = useState<B[]>([]);
@@ -24,6 +41,7 @@ export function Purchases() {
         <table class="tbl"><thead><tr><th>When</th><th>User</th><th>Bundle</th><th>Paid</th><th>Coupon</th><th>Via</th><th>Status</th><th>Expires</th><th></th></tr></thead>
           <tbody>{rows.map((p) => <tr key={p.id}><td class="muted">{fmtDate(p.paid_at ?? p.created_at)}</td><td>{p.display_name ?? p.name}<div class="muted small">{p.email}{p.username ? ` · @${p.username}` : ''}</div></td><td>{p.bundle_title}</td><td>{rupees(p.paid_paise)}{p.paid_paise !== p.list_price_paise && <span class="muted small"> (list {rupees(p.list_price_paise)})</span>}</td><td>{p.coupon_code ?? '—'}</td><td>{p.provider}</td><td><span class={`pill ${p.status === 'paid' ? 'live' : p.status === 'pending' ? 'pending' : 'ended'}`}>{p.status}</span></td><td class="muted">{p.expires_at ? fmtDate(p.expires_at) : 'lifetime'}</td><td class="right">{p.status === 'paid' && <button class="btn sm" onClick={() => revoke(p)}>Revoke</button>}</td></tr>)}</tbody></table>
       )}</section>
+      <PlanSales />
     </>
   );
 }

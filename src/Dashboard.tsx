@@ -3,7 +3,7 @@ import { api, rupees } from './api';
 
 type OR = { today_usd: number | null; month_usd: number | null; total_usd: number | null; key_limit_usd: number | null; key_left_usd: number | null; balance_usd: number | null } | null;
 type Stats = {
-  users: number; users_7d: number; papers: number; tests: number; attempts: number; attempts_24h: number; purchases: number; revenue_paise: number; revenue_7d_paise: number;
+  users: number; users_7d: number; papers: number; tests: number; attempts: number; attempts_24h: number; purchases: number; revenue_paise: number; revenue_7d_paise: number; revenue_by_provider?: { provider: string; n: number; paise: number }[];
   ai_today: { pool: string; count: number }[]; ai_month?: { pool: string; count: number }[]; ai_days?: { day: string; count: number }[]; openrouter?: OR; push_devices?: number;
 };
 
@@ -33,6 +33,7 @@ export function Dashboard() {
     <>
       <div class="titlebar"><h1>Overview</h1></div>
       <section class="stats"><div><b>{s.users}</b>users<div class="stat">+{s.users_7d} this week</div></div><div><b>{s.attempts}</b>tests taken<div class="stat">{s.attempts_24h} in 24 h</div></div><div><b>{s.purchases}</b>purchases</div><div><b>{rupees(s.revenue_paise)}</b>revenue<div class="stat">{rupees(s.revenue_7d_paise)} this week</div></div><div><b>{s.tests}</b>tests · {s.papers} papers</div>{s.push_devices != null && <div><b>{s.push_devices}</b>devices with notifications</div>}</section>
+      {!!s.revenue_by_provider?.length && <p class="muted small" style="margin:-6px 0 16px">Sales by source: {s.revenue_by_provider.map((r) => `${r.provider === 'google_play' ? 'Google Play (app)' : r.provider === 'razorpay' ? 'Website (Razorpay)' : r.provider} ${rupees(r.paise)} from ${r.n}${r.provider === 'google_play' ? ` - you get about ${rupees(Math.round(r.paise * 0.85))}` : ''}`).join(' · ')}</p>}
 
       <section class="card">
         <h2>AI spend (OpenRouter, prepaid)</h2>
