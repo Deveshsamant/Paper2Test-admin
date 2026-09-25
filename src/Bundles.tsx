@@ -5,10 +5,10 @@ import { API, apiRaw, api, fromPaise, rupees, session, toPaise } from './api';
 const SITE = new URL(API).origin;
 import { go } from './main';
 
-export type Item = { id: string; paper_id: string; test_id: string; position: number; title: string | null; paper_title: string; code: string; duration_sec: number; marking_json: string; question_count: number; keyed_count: number ; is_free?: number; section_id?: string | null };
+export type Item = { icon?: string | null; icon_color?: string | null; on_card?: number; id: string; paper_id: string; test_id: string; position: number; title: string | null; paper_title: string; code: string; duration_sec: number; marking_json: string; question_count: number; keyed_count: number ; is_free?: number; section_id?: string | null };
 export type Section = { id: string; title: string; position: number };
 export type BFile = { id: string; title: string; size: number; chunks: number; position: number; locked: number; status: string };
-export type Bundle = { id: string; slug: string; title: string; description: string | null; exam: string | null; exam_tags?: string | null; language?: string | null; difficulty?: string | null; includes_json?: string | null; cover_updated?: number | null; files?: BFile[]; price_paise: number; original_price_paise: number | null; max_attempts_per_test: number | null; validity_days: number | null; status: string; sort_order: number; items: Item[]; sections?: Section[]; sales: number; revenue_paise: number; item_count?: number };
+export type Bundle = { id: string; slug: string; title: string; description: string | null; exam: string | null; exam_tags?: string | null; language?: string | null; difficulty?: string | null; includes_json?: string | null; cover_updated?: number | null; banner_updated?: number | null; card_json?: string | null; files?: BFile[]; price_paise: number; original_price_paise: number | null; max_attempts_per_test: number | null; validity_days: number | null; status: string; sort_order: number; items: Item[]; sections?: Section[]; sales: number; revenue_paise: number; item_count?: number };
 export type Paper = { id: string; title: string; question_count: number; keyed_count: number; owner?: string | null };
 export const statusPill = (s: string) => `pill ${s === 'published' ? 'live' : s === 'archived' ? 'ended' : 'pending'}`;
 
@@ -41,6 +41,7 @@ export function BundleEdit({ id }: { id: string }) {
   const [uploadOpen, setUploadOpen] = useState(false); // website's upload screen in a window
   const addRef = useRef(add); addRef.current = add;
   const [msg, setMsg] = useState<string | null>(null);
+  const [customAccess, setCustomAccess] = useState(false);
   const [cats, setCats] = useState<ExamCategory[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   useEffect(() => { api<{ categories: ExamCategory[] }>('/exams').then((r) => setCats(r.categories)).catch(() => {}); }, []);
@@ -48,7 +49,8 @@ export function BundleEdit({ id }: { id: string }) {
     try { setTags(JSON.parse(r.bundle.exam_tags ?? '[]')); } catch { setTags([]); }
     setB(r.bundle);
     let inc: string[] = []; try { inc = JSON.parse(r.bundle.includes_json ?? '[]'); } catch { /* keep empty */ }
-    setF({ language: r.bundle.language ?? '', difficulty: r.bundle.difficulty ?? '', includes: inc.join('\n'), title: r.bundle.title, slug: r.bundle.slug, description: r.bundle.description ?? '', exam: r.bundle.exam ?? '', price: fromPaise(r.bundle.price_paise), original: fromPaise(r.bundle.original_price_paise), max_attempts: r.bundle.max_attempts_per_test ?? '', validity: r.bundle.validity_days ?? '', sort_order: r.bundle.sort_order });
+    let card: { title?: string; note?: string; cta?: string } = {}; try { card = JSON.parse(r.bundle.card_json ?? '{}'); } catch { /* none */ }
+    setF({ card_title: card.title ?? '', card_note: card.note ?? '', card_cta: card.cta ?? '', language: r.bundle.language ?? '', difficulty: r.bundle.difficulty ?? '', includes: inc.join('\n'), title: r.bundle.title, slug: r.bundle.slug, description: r.bundle.description ?? '', exam: r.bundle.exam ?? '', price: fromPaise(r.bundle.price_paise), original: fromPaise(r.bundle.original_price_paise), max_attempts: r.bundle.max_attempts_per_test ?? '', validity: r.bundle.validity_days ?? '', sort_order: r.bundle.sort_order });
   });
   const loadPapers = (who = '') => api<{ papers: Paper[] }>(`/admin/papers${who ? `?owner=${encodeURIComponent(who)}` : ''}`)
     .then((r) => { setPapers(r.papers); setAdd((a) => ({ ...a, paper_id: r.papers[0]?.id ?? '' })); if (who) setMsg(r.papers.length ? `${r.papers.length} ready papers from ${who}.` : `${who} has no ready papers.`); })
@@ -71,10 +73,18 @@ export function BundleEdit({ id }: { id: string }) {
   }, [id, owner]);
   const set = (k: string) => (e: Event) => setF({ ...f, [k]: (e.target as HTMLInputElement).value });
 
+  /** Give everyone who already bought this bundle the current access time, counted from their payment. */
+  async function applyAccess() {
+    const days = f.validity ? Number(f.validity) : null;
+    if (!confirm(`Set access for everyone who already bought "${b!.title}" to ${days ? `${days} days from their payment` : 'lifetime'}? Save the bundle first if you changed the access time. Buyers whose new end date has passed lose access.`)) return;
+    try { const r = await api<{ updated: number }>(`/admin/bundles/${id}/apply-access`, { method: 'POST', body: { validity_days: days } }); setMsg(`Access updated for ${r.updated} purchase${r.updated === 1 ? '' : 's'}.`); }
+    catch (e: any) { setMsg(e.data?.message ?? e.message); }
+  }
+
   async function save(status?: string) {
     setMsg(null);
     try {
-      await api(`/admin/bundles/${id}`, { method: 'PUT', body: { title: f.title, slug: f.slug || undefined, description: f.description || null, exam: f.exam || null, exam_tags: tags, language: f.language || null, difficulty: f.difficulty || null, includes: String(f.includes ?? '').split('\n').map((x: string) => x.trim()).filter(Boolean).slice(0, 15), price_paise: toPaise(f.price), original_price_paise: f.original ? toPaise(f.original) : null, max_attempts_per_test: f.max_attempts ? Number(f.max_attempts) : null, validity_days: f.validity ? Number(f.validity) : null, sort_order: Number(f.sort_order || 0), ...(status ? { status } : {}) } });
+      await api(`/admin/bundles/${id}`, { method: 'PUT', body: { title: f.title, slug: f.slug || undefined, description: f.description || null, exam: f.exam || null, exam_tags: tags, language: f.language || null, difficulty: f.difficulty || null, includes: String(f.includes ?? '').split('\n').map((x: string) => x.trim()).filter(Boolean).slice(0, 15), price_paise: toPaise(f.price), original_price_paise: f.original ? toPaise(f.original) : null, max_attempts_per_test: f.max_attempts ? Number(f.max_attempts) : null, validity_days: f.validity ? Number(f.validity) : null, card: { title: f.card_title || undefined, note: f.card_note || undefined, cta: f.card_cta || undefined }, sort_order: Number(f.sort_order || 0), ...(status ? { status } : {}) } });
       await load(); setMsg(status ? `Bundle ${status}.` : 'Saved.');
     } catch (e: any) { setMsg(e.code === 'slug_taken' ? 'That slug is taken.' : e.data?.issues?.[0]?.message ?? e.message); }
   }
@@ -117,7 +127,15 @@ export function BundleEdit({ id }: { id: string }) {
             <label class="field">Original price (₹)<input type="number" min={0} step="1" value={f.original} onInput={set('original')} placeholder="strike-through" /></label>
             <label class="field">Sort order<input type="number" value={f.sort_order} onInput={set('sort_order')} /></label>
             <label class="field">Attempts per test<input type="number" min={1} value={f.max_attempts} onInput={set('max_attempts')} placeholder="unlimited" /></label>
-            <label class="field">Validity (days)<input type="number" min={1} value={f.validity} onInput={set('validity')} placeholder="lifetime" /></label>
+            <label class="field">Hover title<input value={f.card_title} onInput={set('card_title')} maxLength={40} placeholder="Quick look" /><span class="muted small">Store card: shown when a student hovers / taps the card</span></label>
+            <label class="field">Hover line (optional)<input value={f.card_note} onInput={set('card_note')} maxLength={120} placeholder="e.g. Solutions in Hindi + English" /></label>
+            <label class="field">Hover button text<input value={f.card_cta} onInput={set('card_cta')} maxLength={30} placeholder="View bundle" /></label>
+            <label class="field">Access time
+              <select value={accessPreset(f.validity)} onChange={(e) => { const v = (e.target as HTMLSelectElement).value; setF({ ...f, validity: v === 'custom' ? String(f.validity || 243) : v }); setCustomAccess(v === 'custom'); }}>
+                {ACCESS.map(([d, l]) => <option value={d}>{l}</option>)}<option value="custom">Custom (days)…</option>
+              </select>
+              {(customAccess || accessPreset(f.validity) === 'custom') && <input type="number" min={1} max={3650} value={f.validity} onInput={set('validity')} placeholder="days" style="margin-top:6px" />}
+              <span class="muted small">Counted from the day of payment. Changes apply to new purchases; <button type="button" class="linkbtn" onClick={applyAccess}>apply to people who already bought it</button>.</span></label>
           </div>
           <div class="row wrap"><button class="btn primary" onClick={() => save()}>Save</button>{b.status !== 'published' ? <button class="btn" onClick={() => save('published')} disabled={!b.items.length}>Publish</button> : <button class="btn" onClick={() => save('draft')}>Unpublish</button>}<button class="btn danger sm" onClick={del}>Delete</button>{msg && <span class="muted">{msg}</span>}</div>
         </section>
@@ -158,9 +176,9 @@ export function BundleEdit({ id }: { id: string }) {
       </section>
       <section class="card">
         <h2>Tests in this bundle ({b.items.length})</h2>
-        <p class="muted small"># sets the order. "Free sample" lets anyone signed in take that test before buying.</p>
+        <p class="muted small"># sets the order. "Free sample" lets anyone signed in take that test before buying. "On card": the tests shown when a student hovers the store card (none ticked = the first 3).</p>
         {b.items.length === 0 ? <p class="muted">Add at least one test before publishing.</p> : (
-          <table class="tbl"><thead><tr><th>#</th><th>Title</th>{!!b.sections?.length && <th>Section</th>}<th>Questions</th><th>Key</th><th>Duration</th><th>Free sample</th><th>Code</th><th></th></tr></thead>
+          <table class="tbl"><thead><tr><th>#</th><th>Title</th>{!!b.sections?.length && <th>Section</th>}<th>Questions</th><th>Key</th><th>Duration</th><th>Free sample</th><th>Icon <span class="muted small">(card + bundle page)</span></th><th>On card <span class="muted small">(max 4)</span></th><th>Code</th><th></th></tr></thead>
             <tbody>{b.items.map((it) => (
               <tr key={it.id}>
                 <td><input type="number" value={it.position} style="width:60px" onChange={(e) => updateItem(it, { position: Number((e.target as HTMLInputElement).value) })} /></td>
@@ -169,6 +187,12 @@ export function BundleEdit({ id }: { id: string }) {
                 <td>{it.question_count}</td><td>{it.keyed_count}/{it.question_count}</td>
                 <td><input type="number" min={1} value={it.duration_sec / 60} style="width:70px" onChange={(e) => updateItem(it, { duration_min: Number((e.target as HTMLInputElement).value) })} /> min</td>
                 <td><input type="checkbox" checked={!!it.is_free} onChange={(e) => updateItem(it, { is_free: (e.target as HTMLInputElement).checked })} /></td>
+                <td><div class="iconpick">
+                  <span class={`ticon c-${it.icon_color || COLORS[b.items.indexOf(it) % 6]}`}><span class="ms">{it.icon || autoIcon(it.title ?? it.paper_title)}</span></span>
+                  <select value={it.icon ?? ''} onChange={(e) => updateItem(it, { icon: (e.target as HTMLSelectElement).value || null })}><option value="">auto</option>{ICONS.map((n) => <option value={n}>{n.replace(/_/g, ' ')}</option>)}</select>
+                  <select value={it.icon_color ?? ''} onChange={(e) => updateItem(it, { icon_color: (e.target as HTMLSelectElement).value || null })}><option value="">auto</option>{ALL_COLORS.map((c) => <option value={c}>{c}</option>)}</select>
+                </div></td>
+                <td><input type="checkbox" checked={!!it.on_card} disabled={!it.on_card && b.items.filter((x) => x.on_card).length >= 4} onChange={(e) => updateItem(it, { on_card: (e.target as HTMLInputElement).checked })} /></td>
                 <td><code>{it.code}</code></td>
                 <td class="right"><button class="btn sm" onClick={() => removeItem(it)}>Remove</button></td>
               </tr>
@@ -190,29 +214,55 @@ export function BundleEdit({ id }: { id: string }) {
   );
 }
 
-/** Cover image: cropped to 1200x630 (the size link previews use) and uploaded as a small JPEG. */
+/** Access time presets (days; '' = lifetime). */
+const ACCESS: [string, string][] = [['30', '1 month'], ['91', '3 months'], ['182', '6 months'], ['243', '8 months (default)'], ['365', '12 months'], ['730', '2 years'], ['', 'Lifetime']];
+const accessPreset = (v: unknown) => { const s = v === null || v === undefined ? '' : String(v); return ACCESS.some(([d]) => d === s) ? s : 'custom'; };
+
+const ICONS = ["quiz", "monitoring", "calculate", "functions", "psychology", "menu_book", "translate", "description", "public", "science", "history_edu", "gavel", "account_balance", "computer", "military_tech", "lightbulb", "edit_note", "school", "flag", "bar_chart", "trending_up", "emoji_events"];
+const COLORS = ['purple', 'green', 'blue', 'orange', 'pink', 'teal'];
+const ALL_COLORS = [...COLORS, 'red', 'amber'];
+/** Same guess as the website when no icon is picked. */
+function autoIcon(title: string) {
+  const rules: [RegExp, string][] = [[/apti|quant|data interp/i, 'monitoring'], [/math|arith|algebra|geometry|numer/i, 'calculate'], [/reason|logic|puzzle/i, 'psychology'], [/english|verbal|grammar|vocab|hindi|language/i, 'menu_book'], [/\bgk\b|general knowledge|awareness|current|static|\bgs\b/i, 'description'], [/science|physics|chem|bio/i, 'science'], [/history/i, 'history_edu'], [/polity|constitution|law/i, 'gavel'], [/econom|bank|finance/i, 'account_balance'], [/geo/i, 'public'], [/computer/i, 'computer'], [/defen[cs]e|army|navy|military|nda|cds|afcat/i, 'military_tech']];
+  return rules.find(([re]) => re.test(title))?.[1] ?? 'quiz';
+}
+
+/** Pictures: the store card image (1200x630) and the banner at the top of the bundle page (1600x500). */
 function CoverCard({ b, onChanged }: { b: Bundle; onChanged: () => void }) {
+  return (
+    <section class="card">
+      <h2>Pictures</h2>
+      <div class="grid2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px">
+        <ImagePick b={b} kind="cover" label="Store card image" hint="Shown on the store card and in link previews. Cropped to 1200×630." W={1200} H={630} v={b.cover_updated} onChanged={onChanged} />
+        <ImagePick b={b} kind="banner" label="Banner inside the bundle" hint="Wide picture at the top of the bundle page. Cropped to 1600×500. None = the store card image." W={1600} H={500} v={b.banner_updated} onChanged={onChanged} />
+      </div>
+    </section>
+  );
+}
+
+function ImagePick({ b, kind, label, hint, W, H, v, onChanged }: { b: Bundle; kind: 'cover' | 'banner'; label: string; hint: string; W: number; H: number; v?: number | null; onChanged: () => void }) {
   const [msg, setMsg] = useState<string | null>(null);
   async function upload(file: File | undefined) {
     if (!file) return;
     setMsg('Uploading…');
     try {
       const bmp = await createImageBitmap(file);
-      const W = 1200, H = 630, r = Math.max(W / bmp.width, H / bmp.height);
+      const r = Math.max(W / bmp.width, H / bmp.height);
       const c = document.createElement('canvas'); c.width = W; c.height = H;
       c.getContext('2d')!.drawImage(bmp, (W - bmp.width * r) / 2, (H - bmp.height * r) / 2, bmp.width * r, bmp.height * r);
       const blob: Blob = await new Promise((res) => c.toBlob((x) => res(x!), 'image/jpeg', 0.82));
-      await apiRaw(`/admin/bundles/${b.id}/cover`, 'PUT', blob, 'image/jpeg');
-      setMsg('Cover updated.'); onChanged();
+      await apiRaw(`/admin/bundles/${b.id}/${kind}`, 'PUT', blob, 'image/jpeg');
+      setMsg('Updated.'); onChanged();
     } catch (e: any) { setMsg(e.message); }
   }
   return (
-    <section class="card">
-      <h2>Cover image</h2>
-      {b.cover_updated ? <img src={`${API.replace(/\/api$/, '')}/api/store/cover/${b.id}/${b.cover_updated}.jpg`} alt="" style="max-width:100%;width:480px;border-radius:8px;display:block;margin-bottom:8px" /> : <p class="muted small">No cover yet. Wide pictures work best (it is cropped to 1200×630).</p>}
+    <div>
+      <h3 style="margin:0 0 4px">{label}</h3>
+      <p class="muted small" style="margin:0 0 8px">{hint}</p>
+      {v ? <img src={`${API.replace(/\/api$/, '')}/api/store/${kind}/${b.id}/${v}.jpg`} alt="" style={`width:100%;aspect-ratio:${W}/${H};object-fit:cover;border-radius:8px;display:block;margin-bottom:8px`} /> : <div class="muted small" style={`aspect-ratio:${W}/${H};border:2px dashed #e2e8f0;border-radius:8px;display:grid;place-items:center;margin-bottom:8px`}>No picture</div>}
       <div class="row wrap"><label class="btn file">Choose picture<input type="file" accept="image/*" onChange={(e) => upload((e.target as HTMLInputElement).files?.[0])} /></label>
-        {!!b.cover_updated && <button class="btn sm" onClick={async () => { await api(`/admin/bundles/${b.id}/cover`, { method: 'DELETE' }); onChanged(); }}>Remove</button>}{msg && <span class="muted">{msg}</span>}</div>
-    </section>
+        {!!v && <button class="btn sm" onClick={async () => { await api(`/admin/bundles/${b.id}/${kind}`, { method: 'DELETE' }); onChanged(); }}>Remove</button>}{msg && <span class="muted">{msg}</span>}</div>
+    </div>
   );
 }
 

@@ -103,3 +103,7 @@ input[type=checkbox], input[type=radio] { accent-color:var(--brand) }
 .navlogo { border-radius:8px }
 .stats div div { background:none; border:0; box-shadow:none; padding:0; border-radius:0; margin-top:4px; font-size:12px; text-align:left }
 .uploadsheet { max-width:1100px } .modal .uploadsheet { margin-top:0 }
+.ms { font-family:'Material Symbols Outlined'; font-weight:normal; font-style:normal; font-size:20px; line-height:1; display:inline-block; white-space:nowrap; direction:ltr; -webkit-font-smoothing:antialiased }
+.ticon { width:32px; height:32px; border-radius:50%; display:inline-grid; place-items:center; flex:none } .ticon.c-purple { background:#f1ecff; color:#7c3aed } .ticon.c-green { background:#e7f8ee; color:#16a34a } .ticon.c-blue { background:#e6f1ff; color:#2563eb } .ticon.c-orange { background:#fff1e6; color:#ea580c } .ticon.c-pink { background:#fde8f1; color:#db2777 } .ticon.c-teal { background:#e3f7f6; color:#0d9488 } .ticon.c-red { background:#fdecec; color:#dc2626 } .ticon.c-amber { background:#fef6e0; color:#d97706 }
+.iconpick { display:flex; gap:6px; align-items:center } .iconpick select { width:auto; padding:4px 6px; font-size:12px }
+.linkbtn { background:none; border:0; padding:0; color:#2563eb; text-decoration:underline; cursor:pointer; font:inherit }
