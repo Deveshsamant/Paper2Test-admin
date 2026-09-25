@@ -8,6 +8,7 @@ import { Coupons } from './Coupons';
 import { Calendar } from './Calendar';
 import { Announcements } from './Announcements';
 import { Prices } from './Prices';
+import { AppVersion } from './AppVersion';
 import { Purchases } from './Purchases';
 import { Users } from './Users';
 
@@ -35,6 +36,7 @@ function App() {
   else if (route[0] === 'calendar') page = <Calendar />;
   else if (route[0] === 'announce') page = <Announcements />;
   else if (route[0] === 'prices') page = <Prices />;
+  else if (route[0] === 'app') page = <AppVersion />;
   else if (route[0] === 'purchases') page = <Purchases />;
   else if (route[0] === 'users') page = <Users />;
   else page = <Dashboard />;
@@ -43,7 +45,7 @@ function App() {
     <>
       <header class="nav">
         <a href="#/" class="brand"><span>Paper2</span>Test <small>admin</small></a>
-        <nav><a href="#/" class={on('')}>Dashboard</a><a href="#/bundles" class={on('bundles')}>Bundles</a><a href="#/calendar" class={on('calendar')}>Calendar</a><a href="#/announce" class={on('announce')}>Announce</a><a href="#/prices" class={on('prices')}>Prices</a><a href="#/coupons" class={on('coupons')}>Coupons</a><a href="#/purchases" class={on('purchases')}>Purchases</a><a href="#/users" class={on('users')}>Users</a></nav>
+        <nav><a href="#/" class={on('')}>Dashboard</a><a href="#/bundles" class={on('bundles')}>Bundles</a><a href="#/calendar" class={on('calendar')}>Calendar</a><a href="#/announce" class={on('announce')}>Announce</a><a href="#/prices" class={on('prices')}>Prices</a><a href="#/app" class={on('app')}>App</a><a href="#/coupons" class={on('coupons')}>Coupons</a><a href="#/purchases" class={on('purchases')}>Purchases</a><a href="#/users" class={on('users')}>Users</a></nav>
         <div class="who"><span class="muted">{me.email}<span class="admintag">admin</span></span><button class="btn sm" onClick={() => { session.token = null; setMe(null); }}>Sign out</button></div>
       </header>
       <main class="page">{page}</main>
