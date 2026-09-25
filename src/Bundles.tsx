@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'preact/hooks';
-import { API, apiRaw, api, fromPaise, rupees, toPaise } from './api';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import { API, apiRaw, api, fromPaise, rupees, session, toPaise } from './api';
+
+/** The website (for the upload window): same site as the API. */
+const SITE = new URL(API).origin;
 import { go } from './main';
 
-export type Item = { id: string; paper_id: string; test_id: string; position: number; title: string | null; paper_title: string; code: string; duration_sec: number; marking_json: string; question_count: number; keyed_count: number ; is_free?: number };
+export type Item = { id: string; paper_id: string; test_id: string; position: number; title: string | null; paper_title: string; code: string; duration_sec: number; marking_json: string; question_count: number; keyed_count: number ; is_free?: number; section_id?: string | null };
+export type Section = { id: string; title: string; position: number };
 export type BFile = { id: string; title: string; size: number; chunks: number; position: number; locked: number; status: string };
-export type Bundle = { id: string; slug: string; title: string; description: string | null; exam: string | null; exam_tags?: string | null; language?: string | null; difficulty?: string | null; includes_json?: string | null; cover_updated?: number | null; files?: BFile[]; price_paise: number; original_price_paise: number | null; max_attempts_per_test: number | null; validity_days: number | null; status: string; sort_order: number; items: Item[]; sales: number; revenue_paise: number; item_count?: number };
-export type Paper = { id: string; title: string; question_count: number; keyed_count: number };
+export type Bundle = { id: string; slug: string; title: string; description: string | null; exam: string | null; exam_tags?: string | null; language?: string | null; difficulty?: string | null; includes_json?: string | null; cover_updated?: number | null; files?: BFile[]; price_paise: number; original_price_paise: number | null; max_attempts_per_test: number | null; validity_days: number | null; status: string; sort_order: number; items: Item[]; sections?: Section[]; sales: number; revenue_paise: number; item_count?: number };
+export type Paper = { id: string; title: string; question_count: number; keyed_count: number; owner?: string | null };
 export const statusPill = (s: string) => `pill ${s === 'published' ? 'live' : s === 'archived' ? 'ended' : 'pending'}`;
 
 type ExamCategory = { id: string; name: string; exams: { code: string; name: string }[] };
@@ -31,7 +35,11 @@ export function BundleEdit({ id }: { id: string }) {
   const [b, setB] = useState<Bundle | null>(null);
   const [papers, setPapers] = useState<Paper[]>([]);
   const [f, setF] = useState<any>(null);
-  const [add, setAdd] = useState({ paper_id: '', duration_min: '60', correct: '2', wrong: '0.66', show_result: true });
+  const [add, setAdd] = useState({ paper_id: '', duration_min: '60', correct: '2', wrong: '0.66', show_result: true, section_id: '' });
+  const [owner, setOwner] = useState(''); // papers from another account (email / @username)
+  const [newSection, setNewSection] = useState('');
+  const [uploadOpen, setUploadOpen] = useState(false); // website's upload screen in a window
+  const addRef = useRef(add); addRef.current = add;
   const [msg, setMsg] = useState<string | null>(null);
   const [cats, setCats] = useState<ExamCategory[]>([]);
   const [tags, setTags] = useState<string[]>([]);
@@ -42,7 +50,25 @@ export function BundleEdit({ id }: { id: string }) {
     let inc: string[] = []; try { inc = JSON.parse(r.bundle.includes_json ?? '[]'); } catch { /* keep empty */ }
     setF({ language: r.bundle.language ?? '', difficulty: r.bundle.difficulty ?? '', includes: inc.join('\n'), title: r.bundle.title, slug: r.bundle.slug, description: r.bundle.description ?? '', exam: r.bundle.exam ?? '', price: fromPaise(r.bundle.price_paise), original: fromPaise(r.bundle.original_price_paise), max_attempts: r.bundle.max_attempts_per_test ?? '', validity: r.bundle.validity_days ?? '', sort_order: r.bundle.sort_order });
   });
-  useEffect(() => { load(); api<{ papers: Paper[] }>('/admin/papers').then((r) => { setPapers(r.papers); if (r.papers[0]) setAdd((a) => ({ ...a, paper_id: r.papers[0].id })); }); }, [id]);
+  const loadPapers = (who = '') => api<{ papers: Paper[] }>(`/admin/papers${who ? `?owner=${encodeURIComponent(who)}` : ''}`)
+    .then((r) => { setPapers(r.papers); setAdd((a) => ({ ...a, paper_id: r.papers[0]?.id ?? '' })); if (who) setMsg(r.papers.length ? `${r.papers.length} ready papers from ${who}.` : `${who} has no ready papers.`); })
+    .catch((e) => setMsg(e.code === 'user_not_found' ? 'No account with that email / username.' : e.message));
+  useEffect(() => { load(); loadPapers(); }, [id]);
+  // The upload window says when its paper is ready: add it to this bundle with the settings chosen in "Add a test".
+  useEffect(() => {
+    const onMsg = async (e: MessageEvent) => {
+      if (e.origin !== SITE || e.data?.type !== 'p2t:paper-ready' || !e.data.paper_id) return;
+      setUploadOpen(false);
+      const a = addRef.current;
+      try {
+        await api(`/admin/bundles/${id}/items`, { method: 'POST', body: { paper_id: e.data.paper_id, duration_min: Number(a.duration_min), marking: { default: { correct: Number(a.correct), wrong: Number(a.wrong) } }, show_result: a.show_result, section_id: a.section_id || null } });
+        setMsg(`Added "${e.data.title}" to the bundle (${e.data.questions} questions${e.data.keyed < e.data.questions ? `, answer key ${e.data.keyed}/${e.data.questions}` : ''}).`);
+      } catch (err: any) { setMsg(err.code === 'already_in_bundle' ? 'That paper is already in this bundle.' : err.code === 'paper_not_ready' ? 'Mark the paper ready first (step 4 on its page).' : err.message); }
+      await load(); loadPapers(owner.trim());
+    };
+    addEventListener('message', onMsg);
+    return () => removeEventListener('message', onMsg);
+  }, [id, owner]);
   const set = (k: string) => (e: Event) => setF({ ...f, [k]: (e.target as HTMLInputElement).value });
 
   async function save(status?: string) {
@@ -54,11 +80,14 @@ export function BundleEdit({ id }: { id: string }) {
   }
   async function addItem(e: Event) {
     e.preventDefault(); setMsg(null);
-    try { await api(`/admin/bundles/${id}/items`, { method: 'POST', body: { paper_id: add.paper_id, duration_min: Number(add.duration_min), marking: { default: { correct: Number(add.correct), wrong: Number(add.wrong) } }, show_result: add.show_result } }); await load(); }
+    try { await api(`/admin/bundles/${id}/items`, { method: 'POST', body: { paper_id: add.paper_id, duration_min: Number(add.duration_min), marking: { default: { correct: Number(add.correct), wrong: Number(add.wrong) } }, show_result: add.show_result, section_id: add.section_id || null } }); await load(); setMsg('Test added.'); }
     catch (err: any) { setMsg(err.code === 'already_in_bundle' ? 'That paper is already in this bundle.' : err.code === 'paper_not_ready' ? 'That paper is not marked ready.' : err.message); }
   }
   async function updateItem(it: Item, patch: any) { await api(`/admin/bundles/${id}/items/${it.id}`, { method: 'PUT', body: patch }); await load(); }
   async function removeItem(it: Item) { if (!confirm(`Remove "${it.title ?? it.paper_title}" from the bundle?`)) return; await api(`/admin/bundles/${id}/items/${it.id}`, { method: 'DELETE' }); await load(); }
+  async function addSection(e: Event) { e.preventDefault(); if (!newSection.trim()) return; await api(`/admin/bundles/${id}/sections`, { method: 'POST', body: { title: newSection.trim() } }); setNewSection(''); await load(); }
+  async function updateSection(s: Section, patch: { title?: string; move?: 'up' | 'down' }) { await api(`/admin/bundles/${id}/sections/${s.id}`, { method: 'PUT', body: patch }); await load(); }
+  async function removeSection(s: Section) { if (!confirm(`Delete the section "${s.title}"? Its tests stay in the bundle, outside any section.`)) return; await api(`/admin/bundles/${id}/sections/${s.id}`, { method: 'DELETE' }); await load(); }
   async function del() { if (!confirm('Delete this bundle? (It is archived instead if it has sales.)')) return; await api(`/admin/bundles/${id}`, { method: 'DELETE' }); go('/bundles'); }
 
   if (!b || !f) return <p class="muted">Loading…</p>;
@@ -94,9 +123,15 @@ export function BundleEdit({ id }: { id: string }) {
         </section>
         <section class="card form">
           <h2>Add a test</h2>
-          <p class="muted small">Ready papers from your admin account. Upload new ones on paper2test.app.</p>
+          <p class="muted small">Pick a ready paper, or upload a new one - PDF, page photos or pasted questions, the same way users do. Duration, marking and section below are used for the new test.</p>
+          <button type="button" class="btn primary" style="margin:0 0 12px" onClick={() => setUploadOpen(true)}>Upload a new paper (PDF / photos)</button>
+          <form class="row wrap" onSubmit={(e) => { e.preventDefault(); loadPapers(owner.trim()); }} style="margin:0 0 6px">
+            <input value={owner} onInput={(e) => setOwner((e.target as HTMLInputElement).value)} placeholder="Papers from another account: email or @username" />
+            <button class="btn sm">Show</button>{owner && <button type="button" class="btn sm" onClick={() => { setOwner(''); loadPapers(); }}>Admin accounts</button>}
+          </form>
           <form onSubmit={addItem}>
-            <label class="field">Paper<select value={add.paper_id} onChange={(e) => setAdd({ ...add, paper_id: (e.target as HTMLSelectElement).value })}>{papers.map((p) => <option value={p.id} disabled={inBundle.has(p.id)}>{p.title} ({p.question_count} Qs{p.keyed_count < p.question_count ? `, key ${p.keyed_count}/${p.question_count}` : ''})</option>)}</select></label>
+            <label class="field">Paper<select value={add.paper_id} onChange={(e) => setAdd({ ...add, paper_id: (e.target as HTMLSelectElement).value })}>{!papers.length && <option value="">No ready papers</option>}{papers.map((p) => <option value={p.id} disabled={inBundle.has(p.id)}>{p.title} ({p.question_count} Qs{p.keyed_count < p.question_count ? `, key ${p.keyed_count}/${p.question_count}` : ''}){p.owner ? ` · ${p.owner}` : ''}{inBundle.has(p.id) ? ' · already added' : ''}</option>)}</select></label>
+            {!!b.sections?.length && <label class="field">Section<select value={add.section_id} onChange={(e) => setAdd({ ...add, section_id: (e.target as HTMLSelectElement).value })}><option value="">No section</option>{b.sections.map((s) => <option value={s.id}>{s.title}</option>)}</select></label>}
             <div class="grid3">
               <label class="field">Duration (min)<input type="number" min={1} value={add.duration_min} onInput={(e) => setAdd({ ...add, duration_min: (e.target as HTMLInputElement).value })} /></label>
               <label class="field">+ per correct<input type="number" step="0.01" value={add.correct} onInput={(e) => setAdd({ ...add, correct: (e.target as HTMLInputElement).value })} /></label>
@@ -108,14 +143,29 @@ export function BundleEdit({ id }: { id: string }) {
         </section>
       </div>
       <section class="card">
+        <h2>Sections <span class="muted small">(optional)</span></h2>
+        <p class="muted small">Group the tests, e.g. by year ("2024", "2023") or subject ("English", "Maths", "GK"). Students see the tests under these headings. Tests without a section are shown first.</p>
+        {!!b.sections?.length && (
+          <table class="tbl"><tbody>{b.sections.map((s, k) => (
+            <tr key={s.id}>
+              <td><input value={s.title} maxLength={80} onChange={(e) => { const v = (e.target as HTMLInputElement).value.trim(); if (v && v !== s.title) updateSection(s, { title: v }); }} /></td>
+              <td class="muted small">{b.items.filter((it) => it.section_id === s.id).length} tests</td>
+              <td class="right"><button class="btn sm" disabled={k === 0} onClick={() => updateSection(s, { move: 'up' })}>↑</button> <button class="btn sm" disabled={k === b.sections!.length - 1} onClick={() => updateSection(s, { move: 'down' })}>↓</button> <button class="btn sm" onClick={() => removeSection(s)}>Delete</button></td>
+            </tr>
+          ))}</tbody></table>
+        )}
+        <form class="row" onSubmit={addSection} style="margin-top:10px"><input value={newSection} maxLength={80} onInput={(e) => setNewSection((e.target as HTMLInputElement).value)} placeholder="New section, e.g. 2024 or English" /><button class="btn" disabled={!newSection.trim()}>Add section</button></form>
+      </section>
+      <section class="card">
         <h2>Tests in this bundle ({b.items.length})</h2>
         <p class="muted small"># sets the order. "Free sample" lets anyone signed in take that test before buying.</p>
         {b.items.length === 0 ? <p class="muted">Add at least one test before publishing.</p> : (
-          <table class="tbl"><thead><tr><th>#</th><th>Title</th><th>Questions</th><th>Key</th><th>Duration</th><th>Free sample</th><th>Code</th><th></th></tr></thead>
+          <table class="tbl"><thead><tr><th>#</th><th>Title</th>{!!b.sections?.length && <th>Section</th>}<th>Questions</th><th>Key</th><th>Duration</th><th>Free sample</th><th>Code</th><th></th></tr></thead>
             <tbody>{b.items.map((it) => (
               <tr key={it.id}>
                 <td><input type="number" value={it.position} style="width:60px" onChange={(e) => updateItem(it, { position: Number((e.target as HTMLInputElement).value) })} /></td>
                 <td><input value={it.title ?? it.paper_title} onChange={(e) => updateItem(it, { title: (e.target as HTMLInputElement).value })} /></td>
+                {!!b.sections?.length && <td><select value={it.section_id ?? ''} onChange={(e) => updateItem(it, { section_id: (e.target as HTMLSelectElement).value || null })}><option value="">—</option>{b.sections.map((s) => <option value={s.id}>{s.title}</option>)}</select></td>}
                 <td>{it.question_count}</td><td>{it.keyed_count}/{it.question_count}</td>
                 <td><input type="number" min={1} value={it.duration_sec / 60} style="width:70px" onChange={(e) => updateItem(it, { duration_min: Number((e.target as HTMLInputElement).value) })} /> min</td>
                 <td><input type="checkbox" checked={!!it.is_free} onChange={(e) => updateItem(it, { is_free: (e.target as HTMLInputElement).checked })} /></td>
@@ -125,6 +175,15 @@ export function BundleEdit({ id }: { id: string }) {
             ))}</tbody></table>
         )}
       </section>
+      {uploadOpen && (
+        <div class="modal" onClick={() => { setUploadOpen(false); loadPapers(owner.trim()); }}>
+          <div class="card sheet uploadsheet" onClick={(e) => e.stopPropagation()}>
+            <div class="row between"><h2 style="margin:0">Upload a paper for "{b.title}"</h2><button class="btn sm" onClick={() => { setUploadOpen(false); loadPapers(owner.trim()); }}>Close</button></div>
+            <p class="muted small">Create the paper, upload it, check the questions and answer key, then press <b>Add to bundle</b> at the top of the paper. Uses your admin account; no plan limits.</p>
+            <iframe name="p2t-embed" title="Upload a paper" src={`${SITE}/?tok=${encodeURIComponent(session.token ?? '')}#/papers`} style="width:100%;height:78vh;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc" />
+          </div>
+        </div>
+      )}
       <CoverCard b={b} onChanged={load} />
       <FilesCard b={b} onChanged={load} />
     </>
