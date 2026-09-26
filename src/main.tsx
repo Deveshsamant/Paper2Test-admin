@@ -11,6 +11,7 @@ import { Prices } from './Prices';
 import { AppVersion } from './AppVersion';
 import { Purchases } from './Purchases';
 import { Users } from './Users';
+import { Referrals } from './Referrals';
 
 export type Me = { id: string; name: string | null; email: string | null; username: string | null; role: string };
 export const go = (h: string) => { location.hash = h; };
@@ -39,13 +40,14 @@ function App() {
   else if (route[0] === 'app') page = <AppVersion />;
   else if (route[0] === 'purchases') page = <Purchases />;
   else if (route[0] === 'users') page = <Users />;
+  else if (route[0] === 'referrals') page = <Referrals />;
   else page = <Dashboard />;
   const on = (k: string) => (route[0] === k || (!route[0] && k === '') ? 'on' : '');
   return (
     <>
       <header class="nav">
         <a href="#/" class="brand"><span>Paper2</span>Test <small>admin</small></a>
-        <nav><a href="#/" class={on('')}>Dashboard</a><a href="#/bundles" class={on('bundles')}>Bundles</a><a href="#/calendar" class={on('calendar')}>Calendar</a><a href="#/announce" class={on('announce')}>Announce</a><a href="#/prices" class={on('prices')}>Prices</a><a href="#/app" class={on('app')}>App</a><a href="#/coupons" class={on('coupons')}>Coupons</a><a href="#/purchases" class={on('purchases')}>Purchases</a><a href="#/users" class={on('users')}>Users</a></nav>
+        <nav><a href="#/" class={on('')}>Dashboard</a><a href="#/bundles" class={on('bundles')}>Bundles</a><a href="#/calendar" class={on('calendar')}>Calendar</a><a href="#/announce" class={on('announce')}>Announce</a><a href="#/prices" class={on('prices')}>Prices</a><a href="#/app" class={on('app')}>App</a><a href="#/coupons" class={on('coupons')}>Coupons</a><a href="#/purchases" class={on('purchases')}>Purchases</a><a href="#/users" class={on('users')}>Users</a><a href="#/referrals" class={on('referrals')}>Referrals</a></nav>
         <div class="who"><span class="muted">{me.email}<span class="admintag">admin</span></span><button class="btn sm" onClick={() => { session.token = null; setMe(null); }}>Sign out</button></div>
       </header>
       <main class="page">{page}</main>

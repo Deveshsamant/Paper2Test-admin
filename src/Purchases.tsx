@@ -3,7 +3,7 @@ import { api, fmtDate, rupees } from './api';
 type P = { id: string; bundle_title: string; email: string | null; username: string | null; display_name: string | null; name: string | null; list_price_paise: number; paid_paise: number; coupon_code: string | null; status: string; provider: string; created_at: number; paid_at: number | null; expires_at: number | null };
 type B = { id: string; title: string };
 type PP = { id: string; code: string; paid_paise: number; status: string; provider: string; created_at: number; paid_at: number | null; email: string | null; username: string | null; display_name: string | null; name: string | null };
-const WHERE: Record<string, string> = { razorpay: 'Website', google_play: 'Google Play', admin_grant: 'Given by admin' };
+const WHERE: Record<string, string> = { razorpay: 'Website', google_play: 'Google Play', admin_grant: 'Given by admin', referral: 'Referral reward' };
 
 /** Plan and paper-pack sales (website and app). */
 function PlanSales() {
